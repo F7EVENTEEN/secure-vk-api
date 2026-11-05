@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.superpowers/
+.env
+*.key
+*session*
+vk_config*.json
+secrets/
+runtime/
+!tests/test_session*.py

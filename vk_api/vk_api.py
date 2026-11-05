@@ -45,7 +45,8 @@ RE_PHONE_POSTFIX = re.compile(r'phone_postfix">.*?(\d+).*?<')
 
 DEFAULT_USERAGENT = 'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0'
 
-DEFAULT_USER_SCOPE = sum(VkUserPermissions)
+# Modified by secure-vk-api: request only the consumer's music permission.
+DEFAULT_USER_SCOPE = VkUserPermissions.AUDIO
 
 
 def get_unknown_exc_str(s):
@@ -105,8 +106,8 @@ class VkApi(object):
 
     def __init__(self, login=None, password=None, token=None,
                  auth_handler=None, captcha_handler=None,
-                 config=jconfig.Config, config_filename='vk_config.v2.json',
-                 api_version='5.92', app_id=6222115, scope=DEFAULT_USER_SCOPE,
+                 config=jconfig.MemoryConfig, config_filename='vk_config.v2.json',
+                 api_version='5.92', app_id=None, scope=DEFAULT_USER_SCOPE,
                  client_secret=None, session=None):
 
         self.login = login
@@ -148,6 +149,13 @@ class VkApi(object):
         )
 
     def auth(self, reauth=False, token_only=False):
+        """Authenticate locally; release the retained password on every exit."""
+        try:
+            return self._auth_impl(reauth=reauth, token_only=token_only)
+        finally:
+            self.password = None
+
+    def _auth_impl(self, reauth=False, token_only=False):
         """ Аутентификация
 
         :param reauth: Позволяет переавторизоваться, игнорируя сохраненные
@@ -173,7 +181,10 @@ class VkApi(object):
         if not self.login:
             raise LoginRequired('Login is required to auth')
 
-        self.logger.info(f'Auth with login: {self.login}')
+        if self.app_id is None:
+            raise AuthError('An explicit app_id is required for authentication')
+
+        self.logger.info('Authentication started')
 
         set_cookies_from_list(
             self.http.cookies,
@@ -202,14 +213,14 @@ class VkApi(object):
             return
 
         if not self.check_sid():
-            self.logger.info(f'remixsid from config is not valid: {self._sid}')
+            self.logger.info('Stored session is invalid')
 
             self._vk_login()
         else:
             self._pass_security_check()
 
         if not self._check_token():
-            self.logger.info(f'access_token from config is not valid: {self.token}')
+            self.logger.info('Stored access token is invalid')
 
             self._api_login()
         else:
@@ -385,7 +396,7 @@ class VkApi(object):
             }
 
             if captcha_sid and captcha_key:
-                self.logger.info(f'Using captcha code: {captcha_sid}: {captcha_key}')
+                self.logger.info('Captcha answer provided')
                 values['captcha_sid'] = captcha_sid
                 values['captcha_key'] = captcha_key
 
@@ -535,7 +546,7 @@ class VkApi(object):
             'remember': int(remember_device),
         }
         if captcha_sid and captcha_key:
-            self.logger.info(f'Using captcha code: {captcha_sid}: {captcha_key}')
+            self.logger.info('Captcha answer provided')
             values['captcha_sid'] = captcha_sid
             values['captcha_key'] = captcha_key
 
@@ -630,6 +641,9 @@ class VkApi(object):
 
     def _api_login(self):
         """ Получение токена через Desktop приложение """
+
+        if self.app_id is None:
+            raise AuthError('An explicit app_id is required for OAuth')
 
         if not self._sid:
             raise AuthError('API auth error (no remixsid)')
@@ -970,11 +984,11 @@ class VkApi(object):
         :type captcha_key: str
         """
         if captcha_sid and captcha_key:
-            self.logger.info(f'Using captcha code: {captcha_sid}: {captcha_key}')
+            self.logger.info('Captcha answer provided')
             values['captcha_sid'] = captcha_sid
             values['captcha_key'] = captcha_key
         if success_token:
-            self.logger.info(f'Using captcha success_token: {success_token}')
+            self.logger.info('Captcha completion provided')
             values['success_token'] = success_token
 
         response = self.http.post(

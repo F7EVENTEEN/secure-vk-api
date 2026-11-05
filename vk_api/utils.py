@@ -101,73 +101,8 @@ def set_cookies_from_list(cookie_jar, l):
 
 
 def enable_debug_mode(vk_session, print_content=False):
-    """ Включает режим отладки:
-        - Вывод сообщений лога
-        - Вывод http запросов
-
-    :param vk_session: объект VkApi
-    :param print_content: печатать ответ http запросов
-    """
-
-    import logging
-    import sys
-    import time
-
-    import requests
-
-    from . import __version__
-
-    pypi_version = requests.get(
-        'https://pypi.org/pypi/vk_api/json'
-    ).json()['info']['version']
-
-    if __version__ != pypi_version:
-        print()
-        print('######### MODULE IS NOT UPDATED!!1 ##########')
-        print()
-        print('Installed vk_api version is:', __version__)
-        print('PyPI vk_api version is:', pypi_version)
-        print()
-        print('######### MODULE IS NOT UPDATED!!1 ##########')
-        print()
-
-
-
-    class DebugHTTPAdapter(requests.adapters.HTTPAdapter):
-        def send(self, request, **kwargs):
-            start = time.time()
-            response = super(DebugHTTPAdapter, self).send(request, **kwargs)
-            end = time.time()
-
-            total = end - start
-
-            body = request.body
-            if body and len(body) > 1024:
-                body = f'{body[:1024]}[STRIPPED]'
-
-            print(
-                '{:0.2f} {} {} {} {} {} {}'.format(
-                    total,
-                    request.method,
-                    request.url,
-                    request.headers,
-                    repr(body),
-                    response.status_code,
-                    response.history
-                )
-            )
-
-            if print_content:
-                print(response.text)
-
-            return response
-
-
-    vk_session.http.mount('http://', DebugHTTPAdapter())
-    vk_session.http.mount('https://', DebugHTTPAdapter())
-
-    vk_session.logger.setLevel(logging.INFO)
-    vk_session.logger.addHandler(logging.StreamHandler(sys.stdout))
+    """Disabled in secure-vk-api: upstream dumps credentials and HTTP bodies."""
+    raise RuntimeError('HTTP debug dumping is disabled in secure-vk-api')
 
 
 def generate_device_id(n: int = 21) -> str:
