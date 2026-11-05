@@ -14,7 +14,8 @@ jobs:
           python-version: '3.13'
           cache: pip
           cache-dependency-path: requirements.lock
-      - run: python -m pip install --only-binary=:all: --require-hashes -r requirements.lock
+      - run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements.lock
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q vk_api jconfig tests
       - run: docker compose run --build --rm tests

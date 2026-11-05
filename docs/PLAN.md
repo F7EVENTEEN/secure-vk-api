@@ -61,4 +61,4 @@ Files: pyproject.toml, requirements.lock, Dockerfile, compose.yaml, README.md, S
 - [x] Pin and audit runtime dependencies, record advisory results; package/import smoke test including vk_api.audio.
 - [x] Add nonroot Docker test image and Compose test service; validate Compose config, attempt image build only if Docker engine is available.
 - [x] Run full suite and compile check; independent reviewer checks security delta, fix important findings with regression tests.
-- [ ] Commit and publish private repository via authenticated GitHub tools; verify remote files/commit. If repository creation/auth is unavailable, complete local deliverable and report exact missing action.
+- [x] Commit and publish repository via authenticated GitHub; verify remote files/commit. User subsequently authorized public visibility after secret review.
