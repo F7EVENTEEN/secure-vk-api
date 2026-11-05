@@ -9,6 +9,7 @@
 import re
 import json
 import time
+from types import SimpleNamespace
 from itertools import islice
 
 from bs4 import BeautifulSoup
@@ -17,6 +18,7 @@ from .audio_url_decoder import decode_audio_url
 from .exceptions import AccessDenied
 from .utils import set_cookies_from_list
 from .upload import FilesOpener
+from .secure_transport import SafeSession
 
 RE_ALBUM_ID = re.compile(r'act=audio_playlist(-?\d+)_(\d+)')
 RE_ACCESS_HASH = re.compile(r'access_hash=(\w+)')
@@ -88,6 +90,27 @@ class VkAudio(object):
         set_cookies_from_list(self._vk.http.cookies, self.DEFAULT_COOKIES)
 
         self._vk.http.get('https://m.vk.ru/')  # load cookies
+
+    @classmethod
+    def from_session(cls, session, *, user_id):
+        """Use an owner-authorized web session without OAuth/app impersonation.
+
+        user_id is the owner's numeric VK profile ID, not an app_id. The caller
+        must obtain the session via manual official-site login and validate its
+        account identity; this constructor does not prove who owns the cookies.
+        Web access remains unofficial and can stop working independently of API.
+        """
+        if not isinstance(session, SafeSession):
+            raise ValueError('Web audio requires SafeSession')
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError('A positive numeric VK user_id is required')
+        audio = cls.__new__(cls)
+        audio.user_id = user_id
+        audio._vk = SimpleNamespace(http=session)
+        audio.convert_m3u8_links = False
+        set_cookies_from_list(session.cookies, cls.DEFAULT_COOKIES)
+        session.get('https://m.vk.ru/')
+        return audio
 
     def get_iter(self, owner_id=None, album_id=None, access_hash=None):
         """ Получить список аудиозаписей пользователя (по частям)

@@ -10,6 +10,7 @@ Modified on 2026-11-06 for the private VK music Telegram bot project:
 - vk_api/utils.py: removed credential-bearing HTTP debug dumping.
 - vk_api/longpoll.py, bot_longpoll.py, upload.py: share SafeSession restrictions.
 - vk_api/__init__.py: fork version and separate upstream version metadata.
+- vk_api/audio.py: explicit web-session constructor without an OAuth app_id.
 - vk_api/secure_config.py and secure_transport.py: new security boundaries.
 - Packaging, tests, Docker configuration and documentation added by this fork.
 
