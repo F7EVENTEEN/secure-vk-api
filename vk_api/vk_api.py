@@ -19,6 +19,7 @@ import requests
 
 import jconfig
 from .credentials import WebLoginCredentials
+from .secure_transport import SafeSession
 from .enums import (
     VerificationMethod,
     VkUserPermissions,
@@ -122,7 +123,9 @@ class VkApi(object):
 
         self.storage = config(self.login, filename=config_filename)
 
-        self.http = session or requests.Session()
+        if session is not None and not isinstance(session, SafeSession):
+            raise ValueError('Custom sessions must use SafeSession')
+        self.http = session if session is not None else SafeSession()
         if not session:
             self.http.headers['User-agent'] = DEFAULT_USERAGENT
 
