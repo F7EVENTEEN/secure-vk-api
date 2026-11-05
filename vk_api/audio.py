@@ -112,7 +112,7 @@ class VkAudio(object):
         session.get('https://m.vk.ru/')
         return audio
 
-    def get_iter(self, owner_id=None, album_id=None, access_hash=None):
+    def get_iter(self, owner_id=None, album_id=None, access_hash=None, *, strict=False):
         """ Получить список аудиозаписей пользователя (по частям)
 
         :param owner_id: ID владельца (отрицательные значения для групп)
@@ -153,7 +153,11 @@ class VkAudio(object):
             ids = scrap_ids(
                 response['data'][0]['list']
             )
+            if strict and len(ids) != len(response['data'][0]['list']):
+                raise AccessDenied('Incomplete audio enumeration; snapshot rejected')
             if not ids:
+                if strict and response['data'][0]['hasMore']:
+                    raise AccessDenied('Unexpected empty audio page; snapshot rejected')
                 break
 
             yield from scrap_tracks(
@@ -161,6 +165,7 @@ class VkAudio(object):
                 self.user_id,
                 self._vk.http,
                 convert_m3u8_links=self.convert_m3u8_links,
+                strict=strict,
             )
             if response['data'][0]['hasMore']:
                 offset += offset_diff
@@ -669,7 +674,7 @@ def scrap_ids_from_html(html, filter_root_el=None):
     return ids
 
 
-def scrap_tracks(ids, user_id, http, convert_m3u8_links=True):
+def scrap_tracks(ids, user_id, http, convert_m3u8_links=True, *, strict=False):
 
     last_request = 0.0
 
@@ -686,6 +691,16 @@ def scrap_tracks(ids, user_id, http, convert_m3u8_links=True):
         ).json()
 
         last_request = time.time()
+        if strict:
+            try:
+                batch = result['data'][0]
+                expected = {(str(row[0]), str(row[1])) for row in ids_group}
+                received = {(str(row[1]), str(row[0])) for row in batch}
+                complete = expected == received and len(batch) == len(expected)
+            except (KeyError, IndexError, TypeError):
+                complete = False
+            if not complete:
+                raise AccessDenied('Incomplete audio batch; snapshot rejected')
         if result['data']:
             data_audio = result['data'][0]
             for audio in data_audio:
