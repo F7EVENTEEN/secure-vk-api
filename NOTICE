@@ -1,0 +1,18 @@
+secure-vk-api
+An independently modified fork of python273/vk_api 11.10.1.
+Upstream: https://github.com/python273/vk_api
+Upstream copyright (c) 2019 python273 and respective contributing authors.
+License: Apache License, Version 2.0 (see LICENSE).
+
+Modified on 2026-11-06 for the private VK music Telegram bot project:
+- vk_api/vk_api.py: memory-only config, limited scope, explicit app identity,
+  removed sensitive log values, password attribute cleanup, safe transport.
+- vk_api/utils.py: removed credential-bearing HTTP debug dumping.
+- vk_api/longpoll.py, bot_longpoll.py, upload.py: share SafeSession restrictions.
+- vk_api/__init__.py: fork version and separate upstream version metadata.
+- vk_api/secure_config.py and secure_transport.py: new security boundaries.
+- Packaging, tests, Docker configuration and documentation added by this fork.
+
+This project is not an official VK product and is not endorsed by VK or the
+upstream maintainers. Upstream compatibility and live VK availability are
+not guaranteed. The remaining upstream modules have not had a full audit.

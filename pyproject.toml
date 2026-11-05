@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secure-vk-api"
+version = "0.1.0"
+description = "Experimental VK API fork with hardened authentication, storage and transport defaults"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "python273 (upstream)"}, {name = "Matvey (fork)"}]
+dependencies = [
+  "requests==2.34.2",
+  "beautifulsoup4==4.15.0",
+  "cryptography==50.0.2",
+]
+
+[tool.setuptools.packages.find]
+include = ["vk_api*", "jconfig*"]
+
+[tool.setuptools]
+include-package-data = false

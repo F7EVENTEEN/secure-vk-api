@@ -7,6 +7,7 @@
 """
 
 import requests
+from .secure_transport import SafeSession
 
 from .vk_api import VkApi, VkApiMethod
 
@@ -35,7 +36,8 @@ class VkUpload(object):
             )
 
         self.vk = vk if isinstance(vk, VkApiMethod) else vk.get_api()
-        self.http = requests.Session()
+        # Modified by secure-vk-api: unknown upload hosts fail closed.
+        self.http = SafeSession()
         self.http.headers.pop('user-agent')
 
     def photo(self, photos, album_id,

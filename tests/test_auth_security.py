@@ -1,8 +1,10 @@
 import contextlib
 import io
 import logging
+import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -10,9 +12,11 @@ import jconfig
 from vk_api import VkApi, VkUserPermissions
 from vk_api.exceptions import AuthError, LoginRequired
 from vk_api.utils import enable_debug_mode
+from vk_api.enums import VerificationMethod
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEMP_ROOT = Path(os.environ.get('TEST_TMPDIR', ROOT))
 
 
 class AuthSecurityTests(unittest.TestCase):
@@ -31,13 +35,29 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertNotIn('FAKE_TOKEN', joined)
 
     def test_default_storage_never_writes_session_to_disk(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+        with tempfile.TemporaryDirectory(dir=TEMP_ROOT) as folder:
             target = Path(folder) / 'session.json'
             client = VkApi(login='FAKE_PHONE', config_filename=str(target))
             client.storage.cookies = [{'value': 'FAKE_COOKIE'}]
             client.storage.save()
             self.assertFalse(target.exists())
             self.assertIsInstance(client.storage, jconfig.MemoryConfig)
+
+    def test_otp_response_does_not_disclose_phone_or_email(self):
+        client = VkApi(auth_handler=lambda: ('FAKE_OTP', False))
+        credentials = SimpleNamespace(api_version='5.207', app_id=123, sid='',
+                                      device_id='fake-device', anonymous_token='FAKE_ANON')
+        responses = [
+            {'info': 'FAKE_PHONE_FAKE_EMAIL', 'status': 'FAKE_SECRET_STATUS'},
+            {'sid': 'FAKE_NEW_SID', 'can_skip_password': False},
+        ]
+        with patch.object(client, 'method', side_effect=responses), \
+             self.assertLogs('vk_api', level='INFO') as logs:
+            client._pass_confirmation_code(VerificationMethod.SMS, credentials)
+        joined = '\n'.join(logs.output)
+        self.assertNotIn('FAKE_PHONE', joined)
+        self.assertNotIn('FAKE_SECRET_STATUS', joined)
+        self.assertNotIn('FAKE_OTP', joined)
 
     def test_default_scope_requests_only_audio(self):
         self.assertEqual(int(VkApi().scope), 8)

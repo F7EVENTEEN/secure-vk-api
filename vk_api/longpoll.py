@@ -11,6 +11,7 @@ from datetime import datetime
 from enum import IntEnum
 
 import requests
+from .secure_transport import SafeSession
 
 CHAT_START_ID = int(2E9)  # id с которого начинаются беседы
 
@@ -506,7 +507,8 @@ class VkLongPoll(object):
         self.ts = None
         self.pts = None
 
-        self.session = requests.Session()
+        # Modified by secure-vk-api: legacy polling obeys the same boundary.
+        self.session = SafeSession()
 
         self.update_longpoll_server()
 

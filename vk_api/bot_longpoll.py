@@ -8,6 +8,7 @@
 from enum import Enum
 
 import requests
+from .secure_transport import SafeSession
 
 CHAT_START_ID = int(2E9)
 
@@ -214,7 +215,8 @@ class VkBotLongPoll(object):
         self.server = None
         self.ts = None
 
-        self.session = requests.Session()
+        # Modified by secure-vk-api: legacy polling obeys the same boundary.
+        self.session = SafeSession()
 
         self.update_longpoll_server()
 

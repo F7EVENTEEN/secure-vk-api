@@ -502,10 +502,7 @@ class VkApi(object):
                 'anonymous_token': credentials.anonymous_token,
                 'access_token': '',
             }, with_cookies=True)
-            self.logger.info(
-                'Confirmation code sent via {} to the {info}, status {status}.'
-                .format(verification_method, **send_code_status)
-            )
+            self.logger.info('Confirmation code requested; manual verification required')
 
         while 1:
             code, _ = self.error_handlers[TWOFACTOR_CODE]()

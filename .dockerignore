@@ -1,0 +1,12 @@
+.git
+.env
+secrets
+runtime
+*.key
+*session*
+__pycache__
+**/__pycache__
+*.egg-info
+build
+dist
+.superpowers

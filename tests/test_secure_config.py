@@ -1,4 +1,5 @@
 import functools
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from unittest.mock import patch
 from vk_api import VkApi
 
 ROOT = Path(__file__).resolve().parents[1]
+TEMP_ROOT = Path(os.environ.get('TEST_TMPDIR', ROOT))
 KEY = b'0' * 32  # Synthetic test-only key.
 
 
@@ -17,7 +19,7 @@ class SecureConfigTests(unittest.TestCase):
         except ModuleNotFoundError:
             self.fail('EncryptedConfig is not implemented')
         self.Config = EncryptedConfig
-        self.folder = tempfile.TemporaryDirectory(dir=ROOT)
+        self.folder = tempfile.TemporaryDirectory(dir=TEMP_ROOT)
         self.addCleanup(self.folder.cleanup)
         self.path = Path(self.folder.name) / 'state.enc'
 
