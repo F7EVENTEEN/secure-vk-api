@@ -15,6 +15,9 @@ only synthetic credentials and do not call VK or a music CDN.
 - Independent review identified remaining OTP response logging and legacy HTTP
   helper bypasses. Four regression failures reproduced before fixes, then pass.
 - Final suite: `python -m unittest discover -s tests -v`: 36 tests, 0 failures.
+- Follow-up web-session constructor: 2 missing-feature failures reproduced,
+  then fixed; current Windows suite has 38 passing tests. This path does not
+  require an OAuth app_id and still needs live owner-session verification.
 - `python -m compileall -q vk_api jconfig tests`: passes.
 - Audio module import is exercised by the suite; fork/upstream versions are
   separately reported as `vk_api.__version__` and `__upstream_version__`.

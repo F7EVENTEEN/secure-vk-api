@@ -12,4 +12,4 @@ dist/
 vk_config*.json
 secrets/
 runtime/
-!tests/test_session*.py
+!tests/*.py
