@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Modified by secure-vk-api on 2026-11-06; see NOTICE for the security changes.
 """
 :authors: deker104, python273
 :license: Apache License, Version 2.0, see LICENSE file

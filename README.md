@@ -47,6 +47,18 @@ Docker запускает только офлайн-тесты, без акка�
 
 ## Использование библиотеки
 
+Установка из исходников (пакет в PyPI этим проектом не публиковался):
+
+```sh
+git clone https://github.com/F7EVENTEEN/secure-vk-api.git
+cd secure-vk-api
+python -m pip install --only-binary=:all: --require-hashes -r requirements.lock
+python -m pip install --no-deps .
+```
+
+Используй отдельное виртуальное окружение с Python 3.13+. Проверенные runtime
+зависимости фиксируются lock-файлом; сборочный backend указан в pyproject.toml.
+
 Для веб-доступа к музыке есть отдельный путь без app_id:
 
 ```python
