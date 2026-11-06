@@ -10,6 +10,7 @@
 import re
 import json
 import time
+from collections import OrderedDict
 from types import SimpleNamespace
 from itertools import islice
 
@@ -41,7 +42,7 @@ class VkAudio(object):
     :param vk: Объект :class:`VkApi`
     """
 
-    __slots__ = ('_vk', 'user_id', 'convert_m3u8_links')
+    __slots__ = ('_vk', 'user_id', 'convert_m3u8_links', '_references', '_unavailable')
 
     DEFAULT_COOKIES = [
         {  # если не установлено, то первый запрос ломается
@@ -84,6 +85,8 @@ class VkAudio(object):
     ]
 
     def __init__(self, vk, convert_m3u8_links=True):
+        self._references = OrderedDict()
+        self._unavailable = OrderedDict()
         self.user_id = vk.method('users.get')[0]['id']
         self._vk = vk
         self.convert_m3u8_links = convert_m3u8_links
@@ -109,9 +112,83 @@ class VkAudio(object):
         audio.user_id = user_id
         audio._vk = SimpleNamespace(http=session)
         audio.convert_m3u8_links = False
+        audio._references = OrderedDict()
+        audio._unavailable = OrderedDict()
         set_cookies_from_list(session.cookies, cls.DEFAULT_COOKIES)
         session.get('https://m.vk.ru/')
         return audio
+
+    def _remember_references(self, references):
+        self._merge_references(references, self._references, self._unavailable)
+
+    @staticmethod
+    def _merge_references(references, target, unavailable):
+        for reference in references:
+            key = (int(reference[0]), int(reference[1]))
+            target[key] = reference
+            target.move_to_end(key)
+            unavailable.pop(key, None)
+        while len(target) > 10000:
+            target.popitem(last=False)
+
+    def get_metadata_iter(self, owner_id=None, album_id=None, access_hash=None):
+        """Enumerate a complete library without resolving playable URLs.
+
+        Restricted/deleted audio still has metadata and is returned with
+        available=False. References stay bounded in RAM, never in the snapshot.
+        """
+        owner_id = self.user_id if owner_id is None else owner_id
+        staged_references = OrderedDict(self._references)
+        staged_unavailable = OrderedDict(self._unavailable)
+        offset = 0
+        seen_pages = set()
+        while True:
+            response = self._vk.http.post(
+                'https://m.vk.ru/audio',
+                data={'act': 'load_section', 'owner_id': owner_id,
+                      'playlist_id': album_id if album_id is not None else -1,
+                      'offset': offset, 'type': 'playlist', 'access_hash': access_hash,
+                      'is_loading_all': 1},
+                headers={'X-Requested-With': 'XMLHttpRequest'}, allow_redirects=False,
+            ).json()
+            try:
+                page = response['data'][0]
+                rows, has_more = page['list'], page['hasMore']
+                if not isinstance(rows, list) or has_more not in (0, 1, False, True):
+                    raise ValueError()
+                tracks = []
+                references = []
+                for row in rows:
+                    key = (int(row[1]), int(row[0]))
+                    if not key[0] or key[1] <= 0 or not isinstance(row[3], str) or not isinstance(row[4], str):
+                        raise ValueError()
+                    parts = row[13].split('/') if isinstance(row[13], str) else []
+                    available = len(parts) > 5 and bool(parts[2] and parts[5])
+                    if available:
+                        references.append((str(key[0]), str(key[1]), parts[2], parts[5]))
+                    else:
+                        staged_unavailable[key] = None
+                        staged_unavailable.move_to_end(key)
+                        staged_references.pop(key, None)
+                        while len(staged_unavailable) > 10000:
+                            staged_unavailable.popitem(last=False)
+                    tracks.append({'owner_id': key[0], 'id': key[1],
+                                   'artist': BeautifulSoup(row[4], 'html.parser').get_text(),
+                                   'title': BeautifulSoup(row[3], 'html.parser').get_text().strip(),
+                                   'duration': max(0, int(row[5])), 'available': available})
+                fingerprint = tuple((t['owner_id'], t['id']) for t in tracks)
+                if fingerprint in seen_pages or (has_more and not rows):
+                    raise ValueError()
+                seen_pages.add(fingerprint)
+            except (IndexError, KeyError, TypeError, ValueError):
+                raise AccessDenied('Incomplete or repeated metadata page; snapshot rejected') from None
+            self._merge_references(references, staged_references, staged_unavailable)
+            yield from tracks
+            if not has_more:
+                self._references = staged_references
+                self._unavailable = staged_unavailable
+                break
+            offset += TRACKS_PER_ALBUM_PAGE if album_id is not None else TRACKS_PER_USER_PAGE
 
     def get_iter(self, owner_id=None, album_id=None, access_hash=None, *, strict=False):
         """ Получить список аудиозаписей пользователя (по частям)
@@ -154,6 +231,7 @@ class VkAudio(object):
             ids = scrap_ids(
                 response['data'][0]['list']
             )
+            self._remember_references(ids)
             if strict and len(ids) != len(response['data'][0]['list']):
                 raise AccessDenied('Incomplete audio enumeration; snapshot rejected')
             if not ids:
@@ -184,35 +262,48 @@ class VkAudio(object):
         return list(self.get_iter(owner_id, album_id, access_hash))
 
     def get_albums_iter(self, owner_id=None):
-        """ Получить список альбомов пользователя (по частям)
-
-        :param owner_id: ID владельца (отрицательные значения для групп)
-        """
-
-        if owner_id is None:
-            owner_id = self.user_id
-
-        offset = 0
-
-        while True:
-            response = self._vk.http.get(
-                f'https://m.vk.ru/audio?act=audio_playlists{owner_id}',
-                params={'offset': offset},
-                allow_redirects=False,
-            )
-
-            if not response.text:
-                raise AccessDenied(
-                    f"You don\'t have permissions to browse {owner_id}\'s albums"
-                )
-
-            albums = scrap_albums(response.text)
-
-            if not albums:
-                break
-
+        """Enumerate current desktop JSON playlist cards, not obsolete mobile HTML."""
+        owner_id = self.user_id if owner_id is None else owner_id
+        request_data = {'al': 1, 'act': 'section', 'claim': 0, 'is_layer': 0,
+                        'owner_id': owner_id, 'section': 'playlists'}
+        seen_cursors = set()
+        seen_ids = set()
+        for _ in range(50):
+            response = self._vk.http.post('https://vk.ru/al_audio.php', data=request_data)
+            try:
+                state = json.loads(response.text.replace('<!--', ''))['payload'][1][1]
+                entries = state['playlists']
+                if not isinstance(entries, list):
+                    raise ValueError()
+                albums = []
+                for entry in entries:
+                    album_owner, album_id = int(entry['ownerId']), int(entry['id'])
+                    if not album_owner or album_id <= 0 or not isinstance(entry['title'], str):
+                        raise ValueError()
+                    key = (album_owner, album_id)
+                    if key in seen_ids:
+                        continue
+                    seen_ids.add(key)
+                    albums.append({'owner_id': album_owner, 'id': album_id,
+                                   'title': BeautifulSoup(entry['title'], 'html.parser').get_text(),
+                                   'access_hash': entry.get('accessHash') or None,
+                                   'artist': entry.get('authorName', ''),
+                                   'plays': entry.get('listens'),
+                                   'url': f'https://vk.ru/audio?act=audio_playlist{album_owner}_{album_id}'})
+                cursor = state.get('nextFrom') or state.get('next_from')
+                section = state.get('sectionId')
+            except (ValueError, KeyError, IndexError, TypeError):
+                raise AccessDenied('Invalid playlist catalog response') from None
             yield from albums
-            offset += ALBUMS_PER_USER_PAGE
+            if not cursor:
+                return
+            marker = (str(section), str(cursor))
+            if marker in seen_cursors or not entries:
+                raise AccessDenied('Repeated or incomplete playlist page')
+            seen_cursors.add(marker)
+            request_data = {'al': 1, 'act': 'load_catalog_section', 'section_id': section,
+                            'start_from': cursor}
+        raise AccessDenied('Playlist catalog exceeded the pagination budget')
 
     def get_albums(self, owner_id=None):
         """ Получить список альбомов пользователя
@@ -325,7 +416,7 @@ class VkAudio(object):
         )
         return json.loads(response.text.replace('<!--', ''))["payload"][1][0]
 
-    def search(self, q, count=100, offset=0):
+    def search(self, q, count=100, offset=0, *, max_pages=10, max_items=1000):
         """ Искать аудиозаписи
 
         :param q: запрос
@@ -333,15 +424,20 @@ class VkAudio(object):
         :param offset: смещение
         """
 
-        return islice(self.search_iter(q, offset=offset), count)
+        return islice(self.search_iter(q, offset=offset, max_pages=max_pages, max_items=max_items), count)
 
-    def search_iter(self, q, offset=0):
+    def search_iter(self, q, offset=0, *, max_pages=10, max_items=1000):
         """ Искать аудиозаписи (генератор)
 
         :param q: запрос
         :param offset: смещение
         """
         offset_left = 0
+        seen_cursors = set()
+        examined = 0
+        page_count = 0
+        if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (max_pages, max_items)):
+            raise ValueError('Finite positive search budgets are required')
 
         response = self._vk.http.post(
             'https://vk.ru/al_audio.php',
@@ -359,6 +455,7 @@ class VkAudio(object):
         json_response = json.loads(response.text.replace('<!--', ''))
 
         while json_response['payload'][1][1]['playlist']:
+            page_count += 1
 
             ids = scrap_ids(
                 json_response['payload'][1][1]['playlist']['list']
@@ -366,17 +463,27 @@ class VkAudio(object):
             if not ids:
                 break
 
-            if offset_left + len(ids) >= offset:
-                if offset_left < offset:
-                    ids = ids[offset - offset_left:]
+            page_size = len(ids)
+            if offset_left + page_size > offset:
+                selected = ids[max(0, offset - offset_left):][:max_items - examined]
+                examined += len(selected)
+                self._remember_references(selected)
 
                 yield from scrap_tracks(
-                    ids,
+                    selected,
                     self.user_id,
                     convert_m3u8_links=self.convert_m3u8_links,
                     http=self._vk.http,
                 )
-            offset_left += len(ids)
+            offset_left += page_size
+            if examined >= max_items or page_count >= max_pages:
+                return
+
+            cursor = (str(json_response['payload'][1][1]['sectionId']),
+                      str(json_response['payload'][1][1]['nextFrom']))
+            if cursor in seen_cursors:
+                raise AccessDenied('Repeated audio search cursor')
+            seen_cursors.add(cursor)
 
             response = self._vk.http.post(
                 'https://vk.ru/al_audio.php',
@@ -518,12 +625,35 @@ class VkAudio(object):
                 )
             offset_left += len(ids)
 
-    def get_audio_by_id(self, owner_id, audio_id):
+    def get_audio_by_id(self, owner_id, audio_id, *, query=None):
         """ Получить аудиозапись по ID
 
         :param owner_id: ID владельца (отрицательные значения для групп)
         :param audio_id: ID аудио
         """
+        key = (int(owner_id), int(audio_id))
+        if key in self._unavailable and key not in self._references:
+            return None
+        if key in self._references:
+            tracks = scrap_tracks([self._references[key]], self.user_id,
+                                  http=self._vk.http, convert_m3u8_links=self.convert_m3u8_links)
+            resolved = next((t for t in tracks if (int(t['owner_id']), int(t['id'])) == key), None)
+            if resolved:
+                return resolved
+            self._references.pop(key, None)
+        if key not in self._references and query:
+            for candidate in self.search(query, count=100, max_pages=3, max_items=100):
+                if (int(candidate['owner_id']), int(candidate['id'])) == key:
+                    return candidate
+                if key in self._references:
+                    break
+            if key not in self._references:
+                return None
+        if key in self._references:
+            tracks = scrap_tracks([self._references[key]], self.user_id,
+                                  http=self._vk.http, convert_m3u8_links=self.convert_m3u8_links)
+            return next((t for t in tracks if (int(t['owner_id']), int(t['id'])) == key), None)
+
         response = self._vk.http.get(
             f'https://m.vk.ru/audio{owner_id}_{audio_id}', allow_redirects=False
         )
@@ -539,10 +669,7 @@ class VkAudio(object):
             http=self._vk.http,
             convert_m3u8_links=self.convert_m3u8_links,
         )
-        if track:
-            return next(track)
-        else:
-            return []
+        return next(track, None)
 
     def get_post_audio(self, owner_id, post_id):
         """ Получить список аудиозаписей из поста пользователя или группы

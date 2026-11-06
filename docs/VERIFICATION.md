@@ -58,3 +58,18 @@ playlist read, global music search or audio download was tested. The original
 bot spec is a proposal, not an implemented product. No application ID is borrowed
 to conceal these unknowns. Complete that live checkpoint before building the
 personal bot on this fork; if VK denies the flow, revisit the connector approach.
+
+## Live music compatibility — 2026-11-06
+
+Authorized-session checks confirmed metadata-only library sync (including unavailable
+entries), global search, modern JSON playlists and selected MP3 URL resolution.
+The companion bot delivered searched audio to Telegram. Some personal-library CDN
+URLs are readable locally but rejected by Telegram URL-fetch; delivery needs a
+bounded local upload fallback in the companion bot. This is not an OAuth audit.
+
+The full synthetic suite now has 61 passing tests. It covers atomic in-memory
+reference caches on failed/cancelled enumeration, bounded cold search, exact audio
+identity, unavailable metadata and modern playlist pagination. No live credentials,
+signed links or personal library fixtures are included in this public repository.
+Independent review found cache atomicity and search-budget issues; both have
+regression tests and fixes. Legacy modules remain outside the full audit scope.

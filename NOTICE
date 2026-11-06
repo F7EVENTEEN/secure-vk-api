@@ -18,3 +18,8 @@ Modified on 2026-11-06 for the private VK music Telegram bot project:
 This project is not an official VK product and is not endorsed by VK or the
 upstream maintainers. Upstream compatibility and live VK availability are
 not guaranteed. The remaining upstream modules have not had a full audit.
+
+Music compatibility update (2026-11-06): metadata-only library enumeration preserves
+unavailable records, atomically stages bounded references, resolves exact IDs through
+reload_audio, bounds cold search and reads modern JSON playlists. Synthetic
+regression fixtures contain no account data.
