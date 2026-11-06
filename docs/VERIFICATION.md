@@ -18,6 +18,9 @@ only synthetic credentials and do not call VK or a music CDN.
 - Follow-up web-session constructor: 2 missing-feature failures reproduced,
   then fixed; current Windows suite has 38 passing tests. This path does not
   require an OAuth app_id and still needs live owner-session verification.
+- Strict library snapshots: 4 regressions added for empty/missing batches and
+  unresolvable source IDs. Current full suite has 42 passing tests; GitHub CI
+  at c1ae6daa78f89c854a9f952e5aa52a90c2866eb5 passed, including Docker.
 - `python -m compileall -q vk_api jconfig tests`: passes.
 - Audio module import is exercised by the suite; fork/upstream versions are
   separately reported as `vk_api.__version__` and `__upstream_version__`.
